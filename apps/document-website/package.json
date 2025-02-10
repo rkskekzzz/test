@@ -1,7 +1,7 @@
 {
   "name": "document-website",
   "version": "1.0.0",
-  "description": "test1",
+  "description": "test2",
   "main": "./build/bundle.js",
   "author": "test",
   "private": true,
