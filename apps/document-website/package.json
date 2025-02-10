@@ -1,0 +1,27 @@
+{
+  "name": "document-website",
+  "version": "1.0.0",
+  "description": "test",
+  "main": "./build/bundle.js",
+  "author": "test",
+  "private": true,
+  "scripts": {},
+  "browserslist": [
+    "Electron >= 8.0",
+    "last 2 Chrome major versions",
+    "last 2 Edge major versions",
+    "last 2 Safari major versions",
+    "not dead",
+    "> 1% in KR",
+    "> 1% in JP",
+    "> 1% in US"
+  ],
+  "dependencies": {},
+  "devDependencies": {},
+  "resolutions": {
+    "@types/react": "^18.0.5"
+  },
+  "msw": {
+    "workerDirectory": "dist/app"
+  }
+}

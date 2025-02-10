@@ -1,0 +1,99 @@
+name: Auto-create PR based on comment
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  get-apps:
+    runs-on: ubuntu-latest
+    if: github.event.issue.pull_request && (contains(github.event.comment.body, 'major') || contains(github.event.comment.body, 'minor') || contains(github.event.comment.body, 'patch'))
+    outputs:
+      apps: ${{ steps.get-labels.outputs.apps }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: exp
+
+      - name: Get PR labels
+        id: get-labels
+        run: |
+          LABELS=$(gh pr view ${{ github.event.issue.number }} --json labels -q '.labels[].name')
+
+          echo "[]" > apps.json
+
+          while IFS= read -r label; do
+            if [[ $label == app:* ]]; then
+              APP_NAME=${label#app:}
+
+              # desk -> ch-desk-web 변환
+              if [ "$APP_NAME" = "desk" ]; then
+                APP_NAME="ch-desk-web"
+              fi
+
+              # 기존 JSON 배열에 새로운 객체 추가
+              jq --arg name "$APP_NAME" '. += [{"name": $ARGS.named.name}]' apps.json > apps.tmp && mv apps.tmp apps.json
+            fi
+          done <<< "$LABELS"
+
+          # GitHub Actions 출력으로 설정
+          echo "apps=$(cat apps.json)" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  version-bump:
+    needs: get-apps
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: ${{ fromJSON(needs.get-apps.outputs.apps) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: exp
+
+      - name: Use Node.js 18.17.0
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18.17.0"
+
+      - name: Install semver
+        run: npm install -g semver
+
+      - name: Create new branch
+        run: |
+          COMMENT_BODY="${{ github.event.comment.body }}"
+          NEW_BRANCH_NAME="version-bump-${{ matrix.app.name }}-${COMMENT_BODY}-${{ github.run_id }}"
+          git checkout -b $NEW_BRANCH_NAME
+
+      - name: Set Git user
+        run: |
+          git config --global user.name "ch-builder"
+          git config --global user.email "eng@channel.io"
+
+      - name: Update version based on comment
+        run: |
+          COMMENT_BODY="${{ github.event.comment.body }}"
+          NEW_VERSION="${{ matrix.app.name }}-$(./scripts/bump_version.sh $COMMENT_BODY ./apps/${{ matrix.app.name }}/package.json)"
+          echo "New Version is $NEW_VERSION"
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+        env:
+          GITHUB_PACKAGES_INSTALL_KEY: ${{ secrets.PACKAGES_INSTALL_KEY }}
+
+      - name: Commit and Push Changes
+        run: |
+          git add "apps/${{ matrix.app.name }}/package.json"
+          git commit -n -m "Bump Version"
+          git push origin HEAD
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create PR
+        run: |
+          COMMENT_BODY="${{ github.event.comment.body }}"
+          NEW_BRANCH_NAME="version-bump-${{ matrix.app.name }}-${COMMENT_BODY}-${{ github.run_id }}"
+          gh pr create --base exp --head $NEW_BRANCH_NAME --title "Version bump to $COMMENT_BODY ($NEW_VERSION)" --body "Automated version bump - $NEW_VERSION" --label "버전수정"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
