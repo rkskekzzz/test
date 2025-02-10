@@ -19,8 +19,8 @@ jobs:
         run: |
           LABELS=$(gh pr view ${{ github.event.issue.number }} --json labels -q '.labels[].name')
 
-          # 임시 JSON 파일 생성
-          echo '[]' > apps.json
+          # 결과를 저장할 배열 초기화
+          APPS_JSON="[]"
 
           while IFS= read -r label; do
             if [[ $label == app:* ]]; then
@@ -31,14 +31,13 @@ jobs:
                 APP_NAME="ch-desk-web"
               fi
 
-              # JSON 배열에 새로운 항목 추가 (따옴표 처리 주의)
-              jq --arg name "$APP_NAME" '. += [{"name":$name}]' apps.json > temp.json && mv temp.json apps.json
+              # JSON 배열에 새로운 항목 추가
+              APPS_JSON=$(echo $APPS_JSON | jq --arg name "$APP_NAME" '. + [{"name": $name}]')
             fi
           done <<< "$LABELS"
 
-          # 결과 출력 및 이스케이프 처리
-          APPS_JSON=$(cat apps.json)
-          echo "apps=${APPS_JSON}" >> $GITHUB_OUTPUT
+          # GitHub Actions 출력으로 설정 (JSON 이스케이프 처리)
+          echo "apps=$(echo $APPS_JSON | jq -c .)" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
